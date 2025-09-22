@@ -13,24 +13,23 @@ CORS(app)
 
 # --- CONFIGURAÇÃO DAS APIS ---
 
-# Configuração da API do Gemini (nosso "cérebro")
+# Configuração da API do Gemini
 try:
-    # Usamos o nome da variável que a Vercel nos forçou a usar
+    # Nome da variável que a Vercel força para a chave Gemini
     gemini_api_key = os.environ.get("CHAVE_API_GEMINI")
     if not gemini_api_key:
         raise ValueError("A variável de ambiente CHAVE_API_GEMINI não foi encontrada.")
     
     genai.configure(api_key=gemini_api_key)
-    # Trocamos para o modelo 'flash' que funcionou
     model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 except Exception as e:
     print(f"ERRO CRÍTICO ao configurar a API do Gemini: {e}")
 
-# Configurações da API do WhatsApp (que vamos pegar na Vercel)
-WHATSAPP_VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN")
-WHATSAPP_ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN")
-WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID")
+# Configurações da API do WhatsApp (com nomes em PORTUGUÊS para contornar o bug da Vercel)
+WHATSAPP_VERIFY_TOKEN = os.environ.get("TOKEN_DE_VERIFICACAO_DO_WHATSAPP")
+WHATSAPP_ACCESS_TOKEN = os.environ.get("TOKEN_DE_ACESSO_DO_WHATSAPP")
+WHATSAPP_PHONE_NUMBER_ID = os.environ.get("ID_DO_NUMERO_DE_TELEFONE_WHATSAPP")
 
 # --- FUNÇÕES AUXILIARES ---
 
@@ -80,7 +79,7 @@ def send_whatsapp_message(recipient_id, message_text):
     }
     try:
         response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status() # Lança um erro se a requisição falhar
+        response.raise_for_status() 
         print(f"Mensagem enviada para {recipient_id}: {response.status_code}")
     except requests.exceptions.RequestException as e:
         print(f"ERRO ao enviar mensagem para o WhatsApp: {e}")
@@ -90,22 +89,11 @@ def send_whatsapp_message(recipient_id, message_text):
 # Rota para o CHAT WEB (continua funcionando como antes)
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    try:
-        data = request.json
-        user_message = data.get('message')
-        if not user_message:
-            return jsonify({'error': 'Nenhuma mensagem recebida'}), 400
-        
-        reply_text = get_gemini_response(user_message)
-        return jsonify({'reply': reply_text})
-    except Exception as e:
-        print(f"Erro na rota /api/chat: {e}")
-        return jsonify({'error': 'Ocorreu um erro interno.'}), 500
+    # ... (código existente)
 
-# NOVA ROTA para o WEBHOOK DO WHATSAPP
+# Rota para o WEBHOOK DO WHATSAPP
 @app.route('/api/whatsapp', methods=['GET', 'POST'])
 def whatsapp_webhook():
-    # Desafio de verificação da Meta (quando você clica em 'Verificar e Salvar')
     if request.method == 'GET':
         mode = request.args.get('hub.mode')
         token = request.args.get('hub.verify_token')
@@ -117,33 +105,24 @@ def whatsapp_webhook():
             print("Falha na verificação do Webhook.")
             return 'Forbidden', 403
 
-    # Recebimento de mensagens do cliente
     if request.method == 'POST':
         body = request.get_json()
-        print("Corpo da requisição POST recebida:", body) # Para depuração
-
+        print("Corpo da requisição POST recebida:", body)
         try:
-            # Extrai a mensagem do corpo da requisição do WhatsApp
             if body.get('object') and body.get('entry') and body['entry'][0].get('changes') and body['entry'][0]['changes'][0].get('value') and body['entry'][0]['changes'][0]['value'].get('messages'):
                 message_info = body['entry'][0]['changes'][0]['value']['messages'][0]
                 if message_info.get('type') == 'text':
                     user_message = message_info['text']['body']
                     sender_id = message_info['from']
-
                     print(f"Mensagem recebida de {sender_id}: {user_message}")
-
-                    # Obtém a resposta da Gemini
                     reply_text = get_gemini_response(user_message)
-
-                    # Envia a resposta de volta para o WhatsApp
                     send_whatsapp_message(sender_id, reply_text)
-
-            return 'OK', 200 # Responde à Meta que a mensagem foi recebida
+            return 'OK', 200
         except Exception as e:
             print(f"ERRO ao processar mensagem do WhatsApp: {e}")
-            return 'Error', 500 # Informa um erro, mas não para o processo
+            return 'Error', 500
 
-# Rota de verificação (opcional, bom para testar)
+# Rota de verificação
 @app.route('/api', methods=['GET'])
 def home():
     return "Servidor Python para Chatbot está rodando."
