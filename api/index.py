@@ -12,7 +12,7 @@ CORS(app)  # Habilita o CORS para permitir requisições do frontend
 
 # Configuração da API do Gemini
 try:
-    api_key = os.environ.get("GEMINI_API_KEY")
+    api_key = os.environ.get("CHAVE_API_GEMINI")
     if not api_key:
         raise ValueError("A variável de ambiente GEMINI_API_KEY não foi encontrada.")
     
