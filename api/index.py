@@ -5,28 +5,21 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-# Carrega as variáveis de ambiente do arquivo .env (para teste local)
 load_dotenv()
-
 app = Flask(__name__)
 CORS(app)
 
 # --- CONFIGURAÇÃO DAS APIS ---
-
-# Configuração da API do Gemini
 try:
-    # Nome da variável que a Vercel força para a chave Gemini
     gemini_api_key = os.environ.get("CHAVE_API_GEMINI")
     if not gemini_api_key:
         raise ValueError("A variável de ambiente CHAVE_API_GEMINI não foi encontrada.")
-    
     genai.configure(api_key=gemini_api_key)
     model = genai.GenerativeModel('gemini-1.5-flash-latest')
-
 except Exception as e:
     print(f"ERRO CRÍTICO ao configurar a API do Gemini: {e}")
 
-# Configurações da API do WhatsApp (com nomes em PORTUGUÊS para contornar o bug da Vercel)
+# NOMES EM PORTUGUÊS PARA CONTORNAR O BUG DA VERCEL
 WHATSAPP_VERIFY_TOKEN = os.environ.get("TOKEN_DE_VERIFICACAO_DO_WHATSAPP")
 WHATSAPP_ACCESS_TOKEN = os.environ.get("TOKEN_DE_ACESSO_DO_WHATSAPP")
 WHATSAPP_PHONE_NUMBER_ID = os.environ.get("ID_DO_NUMERO_DE_TELEFONE_WHATSAPP")
@@ -34,7 +27,7 @@ WHATSAPP_PHONE_NUMBER_ID = os.environ.get("ID_DO_NUMERO_DE_TELEFONE_WHATSAPP")
 # --- FUNÇÕES AUXILIARES ---
 
 def read_knowledge_base():
-    """Lê o conteúdo do arquivo da base de conhecimento de forma robusta."""
+    # ... (código existente, sem alterações)
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         file_path = os.path.join(script_dir, 'knowledge_base.txt')
@@ -45,7 +38,7 @@ def read_knowledge_base():
         return "Erro interno: não foi possível carregar a base de conhecimento."
 
 def get_gemini_response(user_message):
-    """Obtém a resposta da Gemini API."""
+    # ... (código existente, sem alterações)
     knowledge_base = read_knowledge_base()
     prompt = f"""
     Você é um assistente de vendas e atendimento ao cliente chamado Adrian IA.
@@ -67,6 +60,14 @@ def get_gemini_response(user_message):
 
 def send_whatsapp_message(recipient_id, message_text):
     """Envia a resposta de volta para o cliente no WhatsApp."""
+    
+    # !!! INÍCIO DOS LOGS DE DEPURAÇÃO !!!
+    print("--- INICIANDO ENVIO PARA WHATSAPP ---")
+    print(f"ID do Número de Telefone lido da Vercel: {WHATSAPP_PHONE_NUMBER_ID}")
+    print(f"Token de Acesso Existe? {WHATSAPP_ACCESS_TOKEN is not None}")
+    print(f"ID do Destinatário: {recipient_id}")
+    # !!! FIM DOS LOGS DE DEPURAÇÃO !!!
+
     url = f"https://graph.facebook.com/v18.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
     headers = {
         "Authorization": f"Bearer {WHATSAPP_ACCESS_TOKEN}",
@@ -80,31 +81,33 @@ def send_whatsapp_message(recipient_id, message_text):
     try:
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status() 
-        print(f"Mensagem enviada para {recipient_id}: {response.status_code}")
+        print(f"SUCESSO ao enviar para a API da Meta. Status: {response.status_code}")
     except requests.exceptions.RequestException as e:
-        print(f"ERRO ao enviar mensagem para o WhatsApp: {e}")
+        print(f"ERRO DEFINITIVO ao enviar mensagem para o WhatsApp: {e}")
+        print(f"Detalhes do erro da Meta: {e.response.text if e.response else 'Sem detalhes'}")
 
-# --- ROTAS DA API (ENDPOINTS) ---
 
-# Rota para o CHAT WEB (continua funcionando como antes)
+# --- ROTAS DA API ---
+
+# Rota para o CHAT WEB
 @app.route('/api/chat', methods=['POST'])
 def chat():
+    # ... (código existente, sem alterações)
     try:
         data = request.json
         user_message = data.get('message')
         if not user_message:
             return jsonify({'error': 'Nenhuma mensagem recebida'}), 400
-        
         reply_text = get_gemini_response(user_message)
         return jsonify({'reply': reply_text})
     except Exception as e:
         print(f"Erro na rota /api/chat: {e}")
         return jsonify({'error': 'Ocorreu um erro interno.'}), 500
 
-# NOVA ROTA "À PROVA DE BALAS" para o WEBHOOK DO WHATSAPP
+# Rota para o WEBHOOK DO WHATSAPP
 @app.route('/api/whatsapp', methods=['GET', 'POST'])
 def whatsapp_webhook():
-    # Desafio de verificação da Meta (quando você clica em 'Verificar e Salvar')
+    # ... (código existente, sem alterações)
     if request.method == 'GET':
         mode = request.args.get('hub.mode')
         token = request.args.get('hub.verify_token')
@@ -115,43 +118,23 @@ def whatsapp_webhook():
         else:
             print("Falha na verificação do Webhook.")
             return 'Forbidden', 403
-
-    # Recebimento de mensagens do cliente
     if request.method == 'POST':
         body = request.get_json()
-        print("Corpo da requisição POST recebida:", body) # Para depuração
+        print("Corpo da requisição POST recebida:", body)
         try:
-            # Lógica de verificação super segura para garantir que a notificação é uma mensagem de texto de um usuário
-            if (
-                body.get("object")
-                and body.get("entry")
-                and body["entry"][0].get("changes")
-                and body["entry"][0]["changes"][0].get("value")
-                and body["entry"][0]["changes"][0]["value"].get("messages")
-                and body["entry"][0]["changes"][0]["value"]["messages"][0]
-            ):
+            if (body.get("object") and body.get("entry") and body["entry"][0].get("changes") and body["entry"][0]["changes"][0].get("value") and body["entry"][0]["changes"][0]["value"].get("messages") and body["entry"][0]["changes"][0]["value"]["messages"][0]):
                 message_info = body["entry"][0]["changes"][0]["value"]["messages"][0]
                 if message_info.get("type") == "text":
                     user_message = message_info["text"]["body"]
                     sender_id = message_info["from"]
-
                     print(f"MENSAGEM DE TEXTO recebida de {sender_id}: {user_message}")
-
-                    # Obtém a resposta da Gemini
                     reply_text = get_gemini_response(user_message)
-
-                    # Envia a resposta de volta para o WhatsApp
                     send_whatsapp_message(sender_id, reply_text)
-            
-            # Se não for uma mensagem de texto de usuário, apenas ignore e confirme o recebimento.
             else:
                 print("Recebida uma notificação do WhatsApp que não é uma mensagem de texto de usuário. Ignorando.")
-
             return "OK", 200
-        
         except Exception as e:
             print(f"ERRO CRÍTICO ao processar webhook: {e}")
-            # É importante retornar 200 OK mesmo com erro, para não quebrar o webhook com a Meta.
             return "OK", 200
 
 # Rota de verificação
