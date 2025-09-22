@@ -17,8 +17,7 @@ try:
         raise ValueError("A variável de ambiente GEMINI_API_KEY não foi encontrada.")
     
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-pro-latest')
-
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
 except Exception as e:
     print(f"Erro ao configurar a API do Gemini: {e}")
     # Se houver erro na configuração, as rotas não funcionarão corretamente.
